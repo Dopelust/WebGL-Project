@@ -1,3 +1,25 @@
+function InitGL(canvas)
+{
+	var gl = canvas.getContext('webgl');
+	
+	if (!gl)
+	{
+		console.log("Using experimental");
+		gl = canvas.getContext('experimental-webgl')
+	}
+	
+	if (!gl)
+		alert('Your browser does not support WebGL!');
+		
+	gl.enable(gl.DEPTH_TEST);
+	gl.enable(gl.CULL_FACE);
+	gl.cullFace(gl.BACK);
+	
+	gl.viewport(0, 0, canvas.width, canvas.height);
+	
+	return gl;
+}
+
 function InitShader(gl, type, source)
 {
 	const shader = gl.createShader(type);
@@ -13,9 +35,7 @@ function InitShader(gl, type, source)
 	return shader;
 }
 
-var gl;
-
-var InitDemo = function () 
+function InitDemo() 
 {
 	loadTextResource('vertexshader.glsl', function(vsErr, vsText)
 	{
@@ -64,7 +84,7 @@ var InitDemo = function ()
 	});
 };
 
-var InitProgram = function(vertexShaderText, fragmentShaderText)
+function InitProgram(vertexShaderText, fragmentShaderText)
 {
 	var vertexShader = InitShader(gl, gl.VERTEX_SHADER, vertexShaderText);
 	var fragmentShader = InitShader(gl, gl.FRAGMENT_SHADER, fragmentShaderText);
@@ -91,19 +111,28 @@ var InitProgram = function(vertexShaderText, fragmentShaderText)
 	return program;
 };
 
-var isMouseDown = false;
-
-var CreateVertexBufferObject = function(program, arrayBuffer, attribLocation, count)
+function InitMesh(program, meshModel)
 {
-	var cubeVBO = gl.createBuffer();
-	gl.bindBuffer(gl.ARRAY_BUFFER, cubeVBO);
-	gl.bufferData(gl.ARRAY_BUFFER, arrayBuffer, gl.STATIC_DRAW);
-	
-	var positionAttribLocation = gl.getAttribLocation(program, attribLocation);
-	gl.vertexAttribPointer(positionAttribLocation, count, gl.FLOAT, gl.FALSE,Float32Array.BYTES_PER_ELEMENT * count, 0);
-	gl.enableVertexAttribArray(positionAttribLocation);
+	var mesh = new Mesh();
+	mesh.Init(program, meshModel);
+	return mesh;
+}
 
-};
+function InitTexture(textureImage)
+{
+	var texture = gl.createTexture();
+	
+	gl.bindTexture(gl.TEXTURE_2D, texture);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImage);
+	
+	return texture;
+}
+
+var gl;
 
 var isMouseDown = 0;
 
@@ -112,10 +141,53 @@ var deltaMousePos = vec3.create();
 
 var fov = 70;
 
-var RunDemo = function(vertexShaderText, fragmentShaderText, cubeImage, cubeModel) 
+function Mesh()
+{
+	this.indicesLength = 0,
+	
+	this.InitVertexBufferObject = function(program, arrayBuffer, attribLocation, count)
+	{
+		var cubeVBO = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, cubeVBO);
+		gl.bufferData(gl.ARRAY_BUFFER, arrayBuffer, gl.STATIC_DRAW);
+		
+		var positionAttribLocation = gl.getAttribLocation(program, attribLocation);
+		gl.vertexAttribPointer(positionAttribLocation, count, gl.FLOAT, gl.FALSE, Float32Array.BYTES_PER_ELEMENT * count, 0);
+		gl.enableVertexAttribArray(positionAttribLocation);
+	},
+	this.Init = function(program, meshModel)
+	{
+		this.InitVertexBufferObject(program, new Float32Array(meshModel.meshes[0].vertices), 'vertexPosition', 3);
+		this.InitVertexBufferObject(program, new Float32Array(meshModel.meshes[0].normals), 'vertexNormal', 3);
+		this.InitVertexBufferObject(program, new Float32Array(meshModel.meshes[0].texturecoords[0]), 'vertexTexCoord', 2);
+		
+		var indices = [].concat.apply([], meshModel.meshes[0].faces);
+		var cubeIBO = gl.createBuffer();
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeIBO);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+		
+		this.indicesLength = indices.length;
+	},
+	this.Draw = function()
+	{
+		gl.drawElements(gl.TRIANGLES, this.indicesLength, gl.UNSIGNED_SHORT, 0);
+	}
+};
+
+function GameObject(position, mesh)
+{
+	AABB.call(this, position, [-0.5, -0.5, -0.5], [1, 1, 1]);
+	this.mesh = mesh;
+	
+	this.Draw = function()
+	{
+		this.mesh.Draw();
+	}
+};
+
+function RunDemo(vertexShaderText, fragmentShaderText, cubeImage, cubeModel) 
 {
 	var canvas = document.getElementById('game-surface');
-	gl = canvas.getContext('webgl');
 	
 	canvas.onmousedown = function(e)
 	{
@@ -144,57 +216,44 @@ var RunDemo = function(vertexShaderText, fragmentShaderText, cubeImage, cubeMode
 		currentMousePos[1] = e.y;
 	};
 
-	if (!gl)
-	{
-		console.log("Using experimental");
-		gl = canvas.getContext('experimental-webgl')
-	}
-	
-	if (!gl)
-		alert('Your browser does not support WebGL!');
-		
-	gl.enable(gl.DEPTH_TEST);
-	gl.enable(gl.CULL_FACE);
-	gl.cullFace(gl.BACK);
-	gl.viewport(0, 0, canvas.width, canvas.height);
+	gl = InitGL(canvas);
 		
 	var program = InitProgram(vertexShaderText, fragmentShaderText);
 
-	CreateVertexBufferObject(program, new Float32Array(cubeModel.meshes[0].vertices), 'vertexPosition', 3);
-	CreateVertexBufferObject(program, new Float32Array(cubeModel.meshes[0].normals), 'vertexNormal', 3);
-	CreateVertexBufferObject(program, new Float32Array(cubeModel.meshes[0].texturecoords[0]), 'vertexTexCoord', 2);
+	var cubeMesh = InitMesh(program, cubeModel);
+	var cubeTexture = InitTexture(cubeImage);
 	
-	var indices = [].concat.apply([], cubeModel.meshes[0].faces);
-	var cubeIBO = gl.createBuffer();
-	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeIBO);
-	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+	var goList = new Array(new GameObject([0, 0, 0], cubeMesh),
+							new GameObject([1, 0, 0], cubeMesh),
+							new GameObject([0, 0, 1], cubeMesh),
+							new GameObject([-1, 0, 0], cubeMesh),
+							new GameObject([0, 0, -1], cubeMesh),
+							new GameObject([0, 1, 0], cubeMesh),
+							new GameObject([0, -1, 0], cubeMesh),);
+	
+	var uniformLocation = 
+	{
+		mWorld: gl.getUniformLocation(program, 'mWorld'),
+		mView: gl.getUniformLocation(program, 'mView'),
+		mProj: gl.getUniformLocation(program, 'mProj'),
+		cameraPos : gl.getUniformLocation(program, 'cameraPos'),
+		maskColor : gl.getUniformLocation(program, 'maskColor'),
+	};
 	
 	var worldMatrix = new Float32Array(16);
-	var matWorldUniformLocation = gl.getUniformLocation(program, 'mWorld');
-	gl.uniformMatrix4fv(matWorldUniformLocation, gl.FALSE, worldMatrix);
+	gl.uniformMatrix4fv(uniformLocation.mWorld, gl.FALSE, worldMatrix);
 	
 	var viewMatrix = new Float32Array(16);
-	var matViewUniformLocation = gl.getUniformLocation(program, 'mView');
-	gl.uniformMatrix4fv(matViewUniformLocation, gl.FALSE, viewMatrix);
+	gl.uniformMatrix4fv(uniformLocation.mView, gl.FALSE, viewMatrix);
 	
 	var projMatrix = new Float32Array(16);
-	var matProjUniformLocation = gl.getUniformLocation(program, 'mProj');
-	gl.uniformMatrix4fv(matProjUniformLocation, gl.FALSE, projMatrix);
-
-	var cubeTexture = gl.createTexture();
-	gl.bindTexture(gl.TEXTURE_2D, cubeTexture);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cubeImage);
+	gl.uniformMatrix4fv(uniformLocation.mProj, gl.FALSE, projMatrix);
 
 	var identityMatrix = new Float32Array(16);
 	mat4.identity(identityMatrix);
 
 	var cameraPos = vec3.fromValues(0,0,-8);
-	var cameraPosUniformLocation = gl.getUniformLocation(program, 'cameraPos');
-	gl.uniform3f(cameraPosUniformLocation, gl.FALSE, cameraPos[0], cameraPos[1], cameraPos[2]);
+	gl.uniform3f(uniformLocation.cameraPos, gl.FALSE, cameraPos[0], cameraPos[1], cameraPos[2]);
 
 	var cameraTarget = vec3.fromValues(0,0,0);
 	
@@ -207,7 +266,7 @@ var RunDemo = function(vertexShaderText, fragmentShaderText, cubeImage, cubeMode
 	var euler = vec3.create();
 	var pitch = 0;
 	
-	var loop = function() 
+	var update = function()
 	{
 		vec3.set(euler, 0, 0, 0);
 		
@@ -249,41 +308,87 @@ var RunDemo = function(vertexShaderText, fragmentShaderText, cubeImage, cubeMode
 		}
 
 		deltaMousePos = vec3.fromValues(0,0,0);
+	}
+	
+	var rayDirection = vec3.create();
+					
+	function GetPickingRay() 
+	{
+		var invertViewMat = mat4.create();
+		mat4.invert(invertViewMat, viewMatrix);
 		
+		var invertProjMat = mat4.create();
+		mat4.invert(invertProjMat, projMatrix);
+
+		//Ray In Clip Space
+		var rayClip = vec4.fromValues((( 2.0 * currentMousePos[0]) / canvas.width)  - 1.0, ((-2.0 * currentMousePos[1]) / canvas.height) + 1.0, -1.0, 1.0);
+		
+		//Ray In View Space
+		var rayEye = vec4.create();
+		vec4.transformMat4(rayEye, rayClip, invertProjMat);
+		rayEye = vec4.fromValues(rayEye[0], rayEye[1], -1.0, 0.0);
+		
+		//Ray In World Space
+		var rayWorld = vec4.create();
+		vec4.transformMat4(rayWorld, rayEye, invertViewMat);
+		
+		//Ray Normalized
+		rayDirection = vec3.fromValues(rayWorld[0], rayWorld[1], rayWorld[2]);
+		vec3.normalize(rayDirection, rayDirection);
+	}
+
+	var draw = function()
+	{
 		//Calculate View Matrix
 		quat.fromEuler(quaternion, euler[0], euler[1], euler[2])
 		vec3.transformQuat(cameraPos, cameraPos, quaternion);
 		mat4.lookAt(viewMatrix, cameraPos, cameraTarget, vec3.fromValues(0,1,0));
-		gl.uniformMatrix4fv(matViewUniformLocation, gl.FALSE, viewMatrix);
+		gl.uniformMatrix4fv(uniformLocation.mView, gl.FALSE, viewMatrix);
 		
 		//Calculate Projection Matrix
 		mat4.perspective(projMatrix, glMatrix.toRadian(fov), canvas.width/canvas.height, 0.01, 100.0);
-		gl.uniformMatrix4fv(matProjUniformLocation, gl.FALSE, projMatrix);
+		gl.uniformMatrix4fv(uniformLocation.mProj, gl.FALSE, projMatrix);
 		
-		gl.uniform3f(cameraPosUniformLocation, cameraPos[0], cameraPos[1], cameraPos[2]);
+		//Camera Position
+		gl.uniform3f(uniformLocation.cameraPos, cameraPos[0], cameraPos[1], cameraPos[2]);
 
 		gl.clearColor(0.25, 0.5, 1.0, 1.0);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 		
-		mat4.translate(worldMatrix, identityMatrix, vec3.fromValues(0,-0.5,0));
-		gl.uniformMatrix4fv(matWorldUniformLocation, gl.FALSE, worldMatrix);
-		gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+		GetPickingRay();
 		
-		mat4.translate(worldMatrix, identityMatrix, vec3.fromValues(0,-0.5,1));
-		gl.uniformMatrix4fv(matWorldUniformLocation, gl.FALSE, worldMatrix);
-		gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+		var selected = -1;
+		var shortest = 100.0;
 		
-		mat4.translate(worldMatrix, identityMatrix, vec3.fromValues(0,-0.5,-1));
-		gl.uniformMatrix4fv(matWorldUniformLocation, gl.FALSE, worldMatrix);
-		gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+		for (var i = 0; i < goList.length; ++i)
+		{
+			var rayDist = goList[i].RayTest(cameraPos, rayDirection);
+
+			if (rayDist > 0 && rayDist < shortest)
+			{
+				shortest = rayDist;
+				selected = i;
+			}
+		}
 		
-		mat4.translate(worldMatrix, identityMatrix, vec3.fromValues(-1,-0.5,0));
-		gl.uniformMatrix4fv(matWorldUniformLocation, gl.FALSE, worldMatrix);
-		gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
-		
-		mat4.translate(worldMatrix, identityMatrix, vec3.fromValues(1,-0.5,0));
-		gl.uniformMatrix4fv(matWorldUniformLocation, gl.FALSE, worldMatrix);
-		gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+		for (var i = 0; i < goList.length; ++i)
+		{
+			mat4.translate(worldMatrix, identityMatrix, goList[i].position);
+			gl.uniformMatrix4fv(uniformLocation.mWorld, gl.FALSE, worldMatrix);
+			
+			if (i == selected)
+				gl.uniform3f(uniformLocation.maskColor, 0.5, 0, 0);
+			else
+				gl.uniform3f(uniformLocation.maskColor, 0, 0, 0);
+			
+			goList[i].Draw();
+		}
+	}
+	
+	var loop = function() 
+	{
+		update();
+		draw();
 		
 		requestAnimationFrame(loop);
 	};

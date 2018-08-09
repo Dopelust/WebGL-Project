@@ -7,6 +7,8 @@ varying vec2 fragTexCoord;
 uniform sampler2D texture;
 uniform vec3 cameraPos;
 
+uniform vec3 maskColor;
+
 const vec3 lightPos = vec3(-1.0, 3.0, -2.0);
 
 const vec3 ambientColor = vec3(0.5, 0.5, 0.5);
@@ -29,5 +31,6 @@ void main()
 		specular = pow(specAngle, 32.0);
 	}
 
-	gl_FragColor = vec4(ambientColor + diff  * diffuseColor + specular * diffuseColor, 1.0) * texture2D(texture, fragTexCoord);	
+	gl_FragColor = vec4(ambientColor + diff  * diffuseColor + specular * diffuseColor, 1.0) * texture2D(texture, fragTexCoord);
+	gl_FragColor.xyz += maskColor;
 }
