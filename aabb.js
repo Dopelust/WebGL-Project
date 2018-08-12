@@ -79,9 +79,9 @@ function AABB(position, offset, bounds)
 		var tmin = Math.max(Math.max(Math.min(t1, t2), Math.min(t3, t4)), Math.min(t5, t6));
 	
 		if (tmin == t1)
-			return 2;
-		if (tmin == t2)
 			return 3;
+		if (tmin == t2)
+			return 2;
 		if (tmin == t3)
 			return 1;
 		if (tmin == t4)

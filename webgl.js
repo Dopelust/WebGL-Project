@@ -134,13 +134,6 @@ function InitTexture(textureImage)
 
 var gl;
 
-var isMouseDown = 0;
-
-var currentMousePos = vec3.create();
-var deltaMousePos = vec3.create();
-
-var fov = 70;
-
 function Mesh()
 {
 	this.indicesLength = 0,
@@ -185,37 +178,17 @@ function GameObject(position, mesh)
 	}
 };
 
+var camera = new Camera();
+var fov = 70;
+	
+function InitCamera() //For Resetting
+{
+	camera = new Camera();
+}
+
 function RunDemo(vertexShaderText, fragmentShaderText, cubeImage, cubeModel) 
 {
 	var canvas = document.getElementById('game-surface');
-	
-	canvas.onmousedown = function(e)
-	{
-		isMouseDown = e.which;
-		
-		currentMousePos[0] = e.x;
-		currentMousePos[1] = e.y;
-	};
-
-	canvas.onmousewheel = function(e)
-	{
-		fov += e.deltaY * 0.02;
-	};
-	
-	document.onmouseup = function(e)
-	{
-		isMouseDown = 0;
-	};
-	
-	document.onmousemove = function(e)
-	{
-		deltaMousePos[0] = e.x - currentMousePos[0];
-		deltaMousePos[1] = e.y - currentMousePos[1];
-		
-		currentMousePos[0] = e.x;
-		currentMousePos[1] = e.y;
-	};
-
 	gl = InitGL(canvas);
 		
 	var program = InitProgram(vertexShaderText, fragmentShaderText);
@@ -223,13 +196,11 @@ function RunDemo(vertexShaderText, fragmentShaderText, cubeImage, cubeModel)
 	var cubeMesh = InitMesh(program, cubeModel);
 	var cubeTexture = InitTexture(cubeImage);
 	
-	var goList = new Array(new GameObject([0, 0, 0], cubeMesh),
-							new GameObject([1, 0, 0], cubeMesh),
-							new GameObject([0, 0, 1], cubeMesh),
-							new GameObject([-1, 0, 0], cubeMesh),
-							new GameObject([0, 0, -1], cubeMesh),
-							new GameObject([0, 1, 0], cubeMesh),
-							new GameObject([0, -1, 0], cubeMesh),);
+	var goList = [new GameObject([0, 0, 0], cubeMesh),
+					new GameObject([1, 0, 0], cubeMesh),
+					new GameObject([0, 0, 1], cubeMesh),
+					new GameObject([-1, 0, 0], cubeMesh),
+					new GameObject([0, 0, -1], cubeMesh)];
 	
 	var uniformLocation = 
 	{
@@ -239,7 +210,9 @@ function RunDemo(vertexShaderText, fragmentShaderText, cubeImage, cubeModel)
 		cameraPos : gl.getUniformLocation(program, 'cameraPos'),
 		maskColor : gl.getUniformLocation(program, 'maskColor'),
 	};
-	
+
+	gl.uniform3f(uniformLocation.cameraPos, gl.FALSE, camera.position[0], camera.position[1], camera.position[2]);
+
 	var worldMatrix = new Float32Array(16);
 	gl.uniformMatrix4fv(uniformLocation.mWorld, gl.FALSE, worldMatrix);
 	
@@ -252,66 +225,69 @@ function RunDemo(vertexShaderText, fragmentShaderText, cubeImage, cubeModel)
 	var identityMatrix = new Float32Array(16);
 	mat4.identity(identityMatrix);
 
-	var cameraPos = vec3.fromValues(0,0,-8);
-	gl.uniform3f(uniformLocation.cameraPos, gl.FALSE, cameraPos[0], cameraPos[1], cameraPos[2]);
+	var currentMousePos = vec3.create();
+	var deltaMousePos = vec3.create();
 
-	var cameraTarget = vec3.fromValues(0,0,0);
-	
-	var cameraView = vec3.create();
-	var cameraViewN  = vec3.create();
-	
-	var cameraRight = vec3.create();
-	
-	var quaternion = quat.create();
-	var euler = vec3.create();
-	var pitch = 0;
-	
-	var update = function()
+	canvas.onmousedown = function(e)
 	{
-		vec3.set(euler, 0, 0, 0);
+		e.preventDefault();
 		
-		//Calculate View Vector
-		vec3.subtract(cameraView, cameraTarget, cameraPos);
-		vec3.normalize(cameraViewN, cameraView);
+		currentMousePos[0] = e.x - canvas.getBoundingClientRect().x;
+		currentMousePos[1] = e.y - canvas.getBoundingClientRect().y;
 		
-		//Calculate Right Vector
-		vec3.cross(cameraRight, cameraViewN, vec3.fromValues(0,1,0));
-		vec3.normalize(cameraRight, cameraRight);
-				
-		switch (isMouseDown)
+		manipulateVoxels = true;
+	};
+
+	canvas.onmousewheel = function(e)
+	{
+		camera.length += e.deltaY * 0.005;
+	};
+	
+	document.onmouseup = function(e)
+	{
+		if (manipulateVoxels)
 		{
-			case 0: break;
-			case 2: //Middle Mouse Button: Pan Camera
+			switch (e.which)
 			{
-				cameraPos[0] -= deltaMousePos[0] * 0.01 * cameraRight[0];
-				cameraPos[1] += deltaMousePos[1] * 0.01;
-				cameraPos[2] -= deltaMousePos[0] * 0.01 * cameraRight[2];
-
-				cameraTarget = vec3.add(cameraTarget, cameraPos, cameraView);
+			case 1: 
+				RemoveVoxel();
+			break;
+			case 3:
+				PlaceVoxel();
+			break;
 			}
-			break;
-			default: // Left/Right Mouse Button: Orbit Camera
-			{
-				euler[0] -= deltaMousePos[1] * 0.2 * cameraRight[0];
-				euler[1] -= deltaMousePos[0] * 0.2;
-				euler[2] -= deltaMousePos[1] * 0.2 * cameraRight[2];
-				
-				pitch -= deltaMousePos[1] * 0.2;
-				if (pitch > 60 || pitch < -60)
-				{
-					pitch += deltaMousePos[1] * 0.2;
-					vec3.set(euler, 0, euler[1], 0);
-				}
-			}					
-			break;
-			
 		}
-
-		deltaMousePos = vec3.fromValues(0,0,0);
-	}
+	};
+	
+	document.onmousemove = function(e)
+	{
+		eX = e.x - canvas.getBoundingClientRect().x;
+		eY = e.y - canvas.getBoundingClientRect().y;
+		
+		deltaMousePos[0] = eX - currentMousePos[0];
+		deltaMousePos[1] = eY - currentMousePos[1];
+		
+		currentMousePos[0] = eX;
+		currentMousePos[1] = eY;
+		
+		switch (e.which)
+		{
+		case 1: case 3:
+			camera.Orbit(deltaMousePos[0], deltaMousePos[1]);
+		break;
+		case 2:
+			camera.Pan(deltaMousePos[0], deltaMousePos[1]);
+		break;
+		}
+		
+		manipulateVoxels = false;
+	};
+	
+	var selectedIndex = -1;
+	var manipulateVoxels = false;
 	
 	var rayDirection = vec3.create();
-					
+	
 	function GetPickingRay() 
 	{
 		var invertViewMat = mat4.create();
@@ -322,7 +298,7 @@ function RunDemo(vertexShaderText, fragmentShaderText, cubeImage, cubeModel)
 
 		//Ray In Clip Space
 		var rayClip = vec4.fromValues((( 2.0 * currentMousePos[0]) / canvas.width)  - 1.0, ((-2.0 * currentMousePos[1]) / canvas.height) + 1.0, -1.0, 1.0);
-		
+
 		//Ray In View Space
 		var rayEye = vec4.create();
 		vec4.transformMat4(rayEye, rayClip, invertProjMat);
@@ -337,12 +313,71 @@ function RunDemo(vertexShaderText, fragmentShaderText, cubeImage, cubeModel)
 		vec3.normalize(rayDirection, rayDirection);
 	}
 
+	function PlaceVoxel()
+	{
+		if (selectedIndex >= 0)
+		{
+			var face = goList[selectedIndex].RayTestFace(camera.position, rayDirection);			
+			var cubePosition = vec3.create();
+			switch (face)
+			{
+				case 0:
+					vec3.add(cubePosition, goList[selectedIndex].position, vec3.fromValues(0,1,0));
+				break;
+				case 1:
+					vec3.add(cubePosition, goList[selectedIndex].position, vec3.fromValues(0,-1,0));
+				break;
+				case 2:
+					vec3.add(cubePosition, goList[selectedIndex].position, vec3.fromValues(1,0,0));
+				break;
+				case 3:
+					vec3.add(cubePosition, goList[selectedIndex].position, vec3.fromValues(-1,0,0));
+				break;
+				case 4:
+					vec3.add(cubePosition, goList[selectedIndex].position, vec3.fromValues(0,0,1));
+				break;
+				case 5:
+					vec3.add(cubePosition, goList[selectedIndex].position, vec3.fromValues(0,0,-1));
+				break;
+			}
+			goList.push(new GameObject(cubePosition, cubeMesh));
+			clickedIndex = selectedIndex = -1;	
+		}
+	}
+	
+	function RemoveVoxel()
+	{
+		if (selectedIndex >= 0)
+		{
+			goList.splice(selectedIndex, 1);
+			clickedIndex = selectedIndex = -1;	
+		}
+	}
+	
+	var update = function()
+	{
+		camera.Calculate();
+		GetPickingRay();
+		
+		selectedIndex = -1;
+		var shortest = 100.0;
+		
+		for (var i = 0; i < goList.length; ++i)
+		{
+			var rayDist = goList[i].RayTest(camera.position, rayDirection);
+
+			if (rayDist > 0 && rayDist < shortest)
+			{
+				shortest = rayDist;
+				selectedIndex = i;
+			}
+		}							
+	}
+
 	var draw = function()
 	{
 		//Calculate View Matrix
-		quat.fromEuler(quaternion, euler[0], euler[1], euler[2])
-		vec3.transformQuat(cameraPos, cameraPos, quaternion);
-		mat4.lookAt(viewMatrix, cameraPos, cameraTarget, vec3.fromValues(0,1,0));
+		mat4.lookAt(viewMatrix, camera.position, camera.target, vec3.fromValues(0,1,0));
 		gl.uniformMatrix4fv(uniformLocation.mView, gl.FALSE, viewMatrix);
 		
 		//Calculate Projection Matrix
@@ -350,33 +385,17 @@ function RunDemo(vertexShaderText, fragmentShaderText, cubeImage, cubeModel)
 		gl.uniformMatrix4fv(uniformLocation.mProj, gl.FALSE, projMatrix);
 		
 		//Camera Position
-		gl.uniform3f(uniformLocation.cameraPos, cameraPos[0], cameraPos[1], cameraPos[2]);
+		gl.uniform3f(uniformLocation.cameraPos, camera.position[0], camera.position[1], camera.position[2]);
 
 		gl.clearColor(0.25, 0.5, 1.0, 1.0);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-		
-		GetPickingRay();
-		
-		var selected = -1;
-		var shortest = 100.0;
-		
-		for (var i = 0; i < goList.length; ++i)
-		{
-			var rayDist = goList[i].RayTest(cameraPos, rayDirection);
 
-			if (rayDist > 0 && rayDist < shortest)
-			{
-				shortest = rayDist;
-				selected = i;
-			}
-		}
-		
 		for (var i = 0; i < goList.length; ++i)
 		{
 			mat4.translate(worldMatrix, identityMatrix, goList[i].position);
 			gl.uniformMatrix4fv(uniformLocation.mWorld, gl.FALSE, worldMatrix);
 			
-			if (i == selected)
+			if (i == selectedIndex)
 				gl.uniform3f(uniformLocation.maskColor, 0.5, 0, 0);
 			else
 				gl.uniform3f(uniformLocation.maskColor, 0, 0, 0);
@@ -384,11 +403,14 @@ function RunDemo(vertexShaderText, fragmentShaderText, cubeImage, cubeModel)
 			goList[i].Draw();
 		}
 	}
-	
+
 	var loop = function() 
 	{
 		update();
 		draw();
+		
+		//Flush input
+		deltaMousePos = vec3.fromValues(0,0,0);
 		
 		requestAnimationFrame(loop);
 	};
