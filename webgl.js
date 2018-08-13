@@ -20,7 +20,9 @@ function InitGL(canvas)
 	return gl;
 }
 
-function InitShader(gl, type, source)
+var shader = {};
+
+function CreateShader(gl, type, source)
 {
 	const shader = gl.createShader(type);
 	gl.shaderSource(shader, source);
@@ -35,61 +37,52 @@ function InitShader(gl, type, source)
 	return shader;
 }
 
-function InitDemo() 
+function LoadDemo() //Loads the base Vertex/Fragment Shaders
 {
-	loadTextResource('vertexshader.glsl', function(vsErr, vsText)
+	var promises = [];
+	
+	promises[0] = loadTextResource('vertexshader.glsl');
+	promises[0].then(
+	function(response)
 	{
-		if (vsErr)
-		{
-			alert('Fatal Error with getting vertex shader');
-			console.error(vsErr);
-		}
-		else
-		{
-			loadTextResource('fragmentshader.glsl', function(fsErr, fsText)
-			{
-				if (fsErr)
-				{
-					alert('Fatal Error with getting fragment shader');
-					console.error(fsErr);
-				}
-				else
-				{
-					loadJSONResource('cube.json', function(modelErr, modelObj)
-					{
-						if (modelErr)
-						{
-							alert('Fatal Error with getting cube model');
-							console.error(modelErr);
-						}
-						else
-						{
-							loadImage('cobble.png', function(imgErr, img)
-							{
-								if (imgErr)
-								{
-									alert('Fatal Error with getting cube image');
-									console.error(imgErr);
-								}
-								else
-								{
-									RunDemo(vsText, fsText, img, modelObj);
-								}
-							});
-						}
-					});
-				}
-			});
-		}
+		console.log("Downloaded vs");
+		shader.vertexShader = response;
+	},
+	function(error)
+	{
+		alert('Fatal Error with getting vertex shader');
+		console.error(error);
+	});
+	
+	promises[1] = loadTextResource('fragmentshader.glsl');
+	promises[1].then(
+	function(response)
+	{
+		console.log("Downloaded fs");
+		shader.fragmentShader = response;
+	},
+	function(error)
+	{
+		alert('Fatal Error with getting fragment shader');
+		console.error(error);
+	});
+	
+	Promise.all(promises).then(
+	function(values) 
+	{	
+		RunDemo();
 	});
 };
 
-function InitProgram(vertexShaderText, fragmentShaderText)
+function InitProgram()
 {
-	var vertexShader = InitShader(gl, gl.VERTEX_SHADER, vertexShaderText);
-	var fragmentShader = InitShader(gl, gl.FRAGMENT_SHADER, fragmentShaderText);
-	
 	var program = gl.createProgram();
+	
+	console.log("Compiling vs..");
+	var vertexShader = CreateShader(gl, gl.VERTEX_SHADER, shader.vertexShader);
+	console.log("Compiling fs..");
+	var fragmentShader = CreateShader(gl, gl.FRAGMENT_SHADER, shader.fragmentShader);
+	
 	gl.attachShader(program, vertexShader);
 	gl.attachShader(program, fragmentShader);
 	
@@ -111,31 +104,56 @@ function InitProgram(vertexShaderText, fragmentShaderText)
 	return program;
 };
 
-function InitMesh(program, meshModel)
+function InitTexture(texture, image)
 {
-	var mesh = new Mesh();
-	mesh.Init(program, meshModel);
-	return mesh;
-}
-
-function InitTexture(textureImage)
-{
-	var texture = gl.createTexture();
-	
 	gl.bindTexture(gl.TEXTURE_2D, texture);
+	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+		
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImage);
+}	
+
+function CreateTexture(url)
+{
+	var texture = gl.createTexture();
+	
+	var image = new Image();
+	image.onload = function() 
+	{
+		InitTexture(texture, image);
+		texture.loaded = true;
+	}
+	image.src = url;
 	
 	return texture;
 }
 
 var gl;
 
+function InitMesh(program, url)
+{
+	var mesh = new Mesh();
+	
+	loadTextResource('cube.json').then(
+	function(response)
+	{
+		console.log("Downloaded cube.json");
+		mesh.Init(program, JSON.parse(response));
+	},
+	function(error)
+	{
+		alert('Fatal Error with getting cube.json');
+		console.error(error);
+	});
+	
+	return mesh;
+}
+
 function Mesh()
 {
+	this.loaded = false;
 	this.indicesLength = 0,
 	
 	this.InitVertexBufferObject = function(program, arrayBuffer, attribLocation, count)
@@ -160,6 +178,7 @@ function Mesh()
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
 		
 		this.indicesLength = indices.length;
+		this.loaded = true;
 	},
 	this.Draw = function()
 	{
@@ -167,14 +186,24 @@ function Mesh()
 	}
 };
 
-function GameObject(position, mesh)
+function GameObject(position, mesh, texture)
 {
 	AABB.call(this, position, [-0.5, -0.5, -0.5], [1, 1, 1]);
+	
 	this.mesh = mesh;
+	this.texture = texture;
 	
 	this.Draw = function()
 	{
-		this.mesh.Draw();
+		if (this.mesh.loaded)
+		{
+			if (this.texture.loaded)
+				gl.bindTexture(gl.TEXTURE_2D, this.texture);
+			else
+				gl.bindTexture(gl.TEXTURE_2D, GameObject.placeholderTexture);
+			
+			this.mesh.Draw();
+		}
 	}
 };
 
@@ -186,21 +215,26 @@ function InitCamera() //For Resetting
 	camera = new Camera();
 }
 
-function RunDemo(vertexShaderText, fragmentShaderText, cubeImage, cubeModel) 
+function RunDemo() 
 {
 	var canvas = document.getElementById('game-surface');
 	gl = InitGL(canvas);
-		
-	var program = InitProgram(vertexShaderText, fragmentShaderText);
-
-	var cubeMesh = InitMesh(program, cubeModel);
-	var cubeTexture = InitTexture(cubeImage);
 	
-	var goList = [new GameObject([0, 0, 0], cubeMesh),
-					new GameObject([1, 0, 0], cubeMesh),
-					new GameObject([0, 0, 1], cubeMesh),
-					new GameObject([-1, 0, 0], cubeMesh),
-					new GameObject([0, 0, -1], cubeMesh)];
+	var program = InitProgram();
+			  	
+	var cubeMesh = InitMesh(program, "cube.json");
+	var cubeTexture = CreateTexture("cobble.png");
+	
+	//Create placeholder texture while textures load async
+	GameObject.placeholderTexture = gl.createTexture();
+	gl.bindTexture(gl.TEXTURE_2D, GameObject.placeholderTexture);
+	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+
+	var goList = [new GameObject([0, 0, 0], cubeMesh, cubeTexture),
+					new GameObject([1, 0, 0], cubeMesh, cubeTexture),
+					new GameObject([0, 0, 1], cubeMesh, cubeTexture),
+					new GameObject([-1, 0, 0], cubeMesh, cubeTexture),
+					new GameObject([0, 0, -1], cubeMesh, cubeTexture)];
 	
 	var uniformLocation = 
 	{
@@ -340,7 +374,7 @@ function RunDemo(vertexShaderText, fragmentShaderText, cubeImage, cubeModel)
 					vec3.add(cubePosition, goList[selectedIndex].position, vec3.fromValues(0,0,-1));
 				break;
 			}
-			goList.push(new GameObject(cubePosition, cubeMesh));
+			goList.push(new GameObject(cubePosition, cubeMesh, cubeTexture));
 			clickedIndex = selectedIndex = -1;	
 		}
 	}
