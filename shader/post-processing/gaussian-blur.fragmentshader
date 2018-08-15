@@ -1,0 +1,56 @@
+precision mediump float;
+
+varying vec2 texCoord;
+
+uniform sampler2D fbo_texture;
+
+uniform vec2 blurSize;
+uniform float radius;
+uniform bool verticalBlur;
+
+float SCurve (float value) 
+{
+    if (value < 0.5)
+    {
+        return value * value * 2.0;
+    }
+    
+    else
+    {
+    	value -= 1.0;
+    	return 1.0 - value * value * 2.0;
+    }
+}
+
+vec4 Blur (sampler2D source, vec2 size, vec2 uv, float radius, vec2 direction) 
+{
+		vec4 C = vec4(0.0); 
+
+		float width = size.x;
+		float height = size.y;
+
+		float divisor = 0.0; 
+        float weight = 0.0;
+        
+        float radiusMultiplier = 1.0 / radius;
+        
+		for (float x = 0; x <= radius; x++)
+		{
+			weight = SCurve(1.0 - (abs(x) * radiusMultiplier));
+
+            C += texture2D(source, uv - vec2(x * width * direction.x, x * height * direction.y)) * weight; 
+            C += texture2D(source, uv + vec2(x * width * direction.x, x * height * direction.y)) * weight; 
+            
+			divisor += weight * 2; 
+		}
+
+		return C / divisor;
+}
+
+void main()
+{
+	if (radius > 0)
+		gl_FragColor = Blur(fbo_texture, blurSize.xy, gl_FragCoord.xy * blurSize.xy, radius, vec2(!verticalBlur, verticalBlur));
+	else
+		gl_FragColor = texture2D(fbo_texture, texCoord);
+}

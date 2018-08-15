@@ -1,0 +1,34 @@
+precision mediump float;
+
+varying vec2 texCoord;
+
+uniform sampler2D colorTexture;	
+uniform sampler2D blurTexture;
+uniform sampler2D normalMap;
+
+uniform float scale;
+uniform float focalPoint;
+
+float GetDepth()
+{
+	float depth = texture2D(normalMap, texCoord).w;
+
+	if (depth == 0)
+		depth = 1000;
+
+	return depth;
+}
+
+void main()
+{
+	float depth = focalPoint - GetDepth();
+
+	if (depth < 0)
+		depth = -depth;
+
+	depth = clamp(depth * 0.005 * scale, 0, 1);
+
+	vec4 tex = texture2D(colorTexture, texCoord); 
+	gl_FragColor = tex + depth * (texture2D(blurTexture, texCoord) - tex);
+	gl_FragColor.a = 1;
+}

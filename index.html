@@ -6,16 +6,25 @@
 		<canvas id="game-surface" oncontextmenu="return false;" width="1280" height="720">
 			Your browser does not support HTML5
 		</canvas>
+		
 		<br>
-
+		
+		<button onclick="InitCamera()">Reset Camera</button>
+		<button onclick="InitCamera()">Reset World</button>
+		
+		<br><br>
+		
+		<p>Gaussian Blur</p>
+		<input type="range" min="0" max="32" value="0" class="slider" id="gaussian-blur-slider"></input> 
+		&nbsp
+		<span id="gaussian-blur-out"> 0 </span> 
+		
 		<script src="gl-matrix.js"></script>
 		<script src="loader.js"></script>
 		<script src="aabb.js"></script>
 		<script src="camera.js"></script>
 		<script src="webgl.js"></script>
+		<script src="slider.js"></script>
 		
-		<button onclick="InitCamera()">Reset Camera</button>
-		<button onclick="InitCamera()">Reset World</button>
-
 	</body>
 </html>

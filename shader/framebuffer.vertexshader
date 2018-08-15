@@ -1,0 +1,12 @@
+precision mediump float;
+
+attribute vec3 vertexPosition_modelspace;
+attribute vec2 vertexTexCoord;
+
+varying vec2 texCoord;
+
+void main(void) 
+{
+	gl_Position = vec4(vertexPosition_modelspace * 2.0, 1);
+	texCoord = vertexTexCoord;
+}

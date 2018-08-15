@@ -1,0 +1,18 @@
+precision mediump float;
+
+varying vec2 texCoord;
+
+uniform sampler2D colorTexture;	
+
+uniform float intensity;
+uniform float amount;
+
+void main()
+{
+	vec3 sample = texture2D(colorTexture, texCoord).xyz;
+
+	if (sample.x + sample.y + sample.z >= amount + amount + amount)
+		gl_FragColor = vec4(sample, 1.0) * intensity;
+	else
+		gl_FragColor = vec4(0, 0, 0, 1.0);
+}

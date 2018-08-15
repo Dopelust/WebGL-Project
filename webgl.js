@@ -20,7 +20,11 @@ function InitGL(canvas)
 	return gl;
 }
 
-var shader = {};
+var gl;
+var canvas;
+
+var defaultProgram = new Program();
+var fboProgram = new Program();
 
 function CreateShader(gl, type, source)
 {
@@ -41,67 +45,72 @@ function LoadDemo() //Loads the base Vertex/Fragment Shaders
 {
 	var promises = [];
 	
-	promises[0] = loadTextResource('vertexshader.glsl');
-	promises[0].then(
-	function(response)
-	{
-		console.log("Downloaded vs");
-		shader.vertexShader = response;
-	},
-	function(error)
-	{
-		alert('Fatal Error with getting vertex shader');
-		console.error(error);
-	});
+	var shaderResolve = function(response) {
+		Promise.resolve(response); };
+	var shaderError = function(error) {
+		alert('Fatal Error getting shader');
+		console.error(error); };
 	
-	promises[1] = loadTextResource('fragmentshader.glsl');
-	promises[1].then(
-	function(response)
-	{
-		console.log("Downloaded fs");
-		shader.fragmentShader = response;
-	},
-	function(error)
-	{
-		alert('Fatal Error with getting fragment shader');
-		console.error(error);
-	});
+	promises[0] = loadTextResource('shader/vertex.vertexshader');
+	promises[0].then(shaderResolve, shaderError);
+	
+	promises[1] = loadTextResource('shader/fragment.fragmentshader');
+	promises[1].then(shaderResolve, shaderError);
+	
+	promises[2] = loadTextResource('shader/framebuffer.vertexshader');
+	promises[2].then(shaderResolve, shaderError);
+	
+	promises[3] = loadTextResource('shader/framebuffer.fragmentshader');
+	promises[3].then(shaderResolve, shaderError);
 	
 	Promise.all(promises).then(
 	function(values) 
 	{	
+		canvas = document.getElementById('game-surface');
+		gl = InitGL(canvas);
+		
+		defaultProgram.Init(values[0], values[1]);
+		fboProgram.Init(values[2], values[3]);
+		
 		RunDemo();
 	});
 };
 
-function InitProgram()
+function Program()
 {
-	var program = gl.createProgram();
+	this.uniform = {};
+	this.program;
 	
-	console.log("Compiling vs..");
-	var vertexShader = CreateShader(gl, gl.VERTEX_SHADER, shader.vertexShader);
-	console.log("Compiling fs..");
-	var fragmentShader = CreateShader(gl, gl.FRAGMENT_SHADER, shader.fragmentShader);
-	
-	gl.attachShader(program, vertexShader);
-	gl.attachShader(program, fragmentShader);
-	
-	gl.linkProgram(program);
-	if (!gl.getProgramParameter(program, gl.LINK_STATUS))
+	this.Use = function()
 	{
-		console.error('ERROR LINKING PROGRAM', gl.getProgramInfoLog(program));
-		return;
-	}
-	
-	gl.validateProgram(program);
-	if (!gl.getProgramParameter(program, gl.VALIDATE_STATUS))
+		gl.useProgram(this.program);
+	};
+	this.Init = function(vertexShader, fragmentShader)
 	{
-		console.error('ERROR VALIDATING PROGRAM', gl.getProgramInfoLog(program));
-		return;
-	}
+		this.program = gl.createProgram();
 	
-	gl.useProgram(program);
-	return program;
+		console.log("Compiling vs..");
+		var vertexShader = CreateShader(gl, gl.VERTEX_SHADER, vertexShader);
+		console.log("Compiling fs..");
+		var fragmentShader = CreateShader(gl, gl.FRAGMENT_SHADER, fragmentShader);
+		
+		gl.attachShader(this.program, vertexShader);
+		gl.attachShader(this.program, fragmentShader);
+		
+		gl.linkProgram(this.program);
+		if (!gl.getProgramParameter(this.program, gl.LINK_STATUS))
+		{
+			console.error('ERROR LINKING PROGRAM', gl.getProgramInfoLog(program));
+			return;
+		}
+		
+		gl.validateProgram(this.program);
+		if (!gl.getProgramParameter(this.program, gl.VALIDATE_STATUS))
+		{
+			console.error('ERROR VALIDATING PROGRAM', gl.getProgramInfoLog(program));
+			return;
+		}
+	};
 };
 
 function InitTexture(texture, image)
@@ -129,8 +138,6 @@ function CreateTexture(url)
 	
 	return texture;
 }
-
-var gl;
 
 function InitMesh(program, url)
 {
@@ -216,13 +223,10 @@ function InitCamera() //For Resetting
 }
 
 function RunDemo() 
-{
-	var canvas = document.getElementById('game-surface');
-	gl = InitGL(canvas);
+{	
+	defaultProgram.Use();
 	
-	var program = InitProgram();
-			  	
-	var cubeMesh = InitMesh(program, "cube.json");
+	var cubeMesh = InitMesh(defaultProgram.program, "cube.json");
 	var cubeTexture = CreateTexture("cobble.png");
 	
 	//Create placeholder texture while textures load async
@@ -236,25 +240,25 @@ function RunDemo()
 					new GameObject([-1, 0, 0], cubeMesh, cubeTexture),
 					new GameObject([0, 0, -1], cubeMesh, cubeTexture)];
 	
-	var uniformLocation = 
+	defaultProgram.uniform = 
 	{
-		mWorld: gl.getUniformLocation(program, 'mWorld'),
-		mView: gl.getUniformLocation(program, 'mView'),
-		mProj: gl.getUniformLocation(program, 'mProj'),
-		cameraPos : gl.getUniformLocation(program, 'cameraPos'),
-		maskColor : gl.getUniformLocation(program, 'maskColor'),
+		mWorld: gl.getUniformLocation(defaultProgram.program, 'mWorld'),
+		mView: gl.getUniformLocation(defaultProgram.program, 'mView'),
+		mProj: gl.getUniformLocation(defaultProgram.program, 'mProj'),
+		cameraPos : gl.getUniformLocation(defaultProgram.program, 'cameraPos'),
+		maskColor : gl.getUniformLocation(defaultProgram.program, 'maskColor'),
 	};
 
-	gl.uniform3f(uniformLocation.cameraPos, gl.FALSE, camera.position[0], camera.position[1], camera.position[2]);
+	gl.uniform3f(defaultProgram.uniform.cameraPos, gl.FALSE, camera.position[0], camera.position[1], camera.position[2]);
 
 	var worldMatrix = new Float32Array(16);
-	gl.uniformMatrix4fv(uniformLocation.mWorld, gl.FALSE, worldMatrix);
+	gl.uniformMatrix4fv(defaultProgram.uniform.mWorld, gl.FALSE, worldMatrix);
 	
 	var viewMatrix = new Float32Array(16);
-	gl.uniformMatrix4fv(uniformLocation.mView, gl.FALSE, viewMatrix);
+	gl.uniformMatrix4fv(defaultProgram.uniform.mView, gl.FALSE, viewMatrix);
 	
 	var projMatrix = new Float32Array(16);
-	gl.uniformMatrix4fv(uniformLocation.mProj, gl.FALSE, projMatrix);
+	gl.uniformMatrix4fv(defaultProgram.uniform.mProj, gl.FALSE, projMatrix);
 
 	var identityMatrix = new Float32Array(16);
 	mat4.identity(identityMatrix);
@@ -412,14 +416,14 @@ function RunDemo()
 	{
 		//Calculate View Matrix
 		mat4.lookAt(viewMatrix, camera.position, camera.target, vec3.fromValues(0,1,0));
-		gl.uniformMatrix4fv(uniformLocation.mView, gl.FALSE, viewMatrix);
+		gl.uniformMatrix4fv(defaultProgram.uniform.mView, gl.FALSE, viewMatrix);
 		
 		//Calculate Projection Matrix
 		mat4.perspective(projMatrix, glMatrix.toRadian(fov), canvas.width/canvas.height, 0.01, 100.0);
-		gl.uniformMatrix4fv(uniformLocation.mProj, gl.FALSE, projMatrix);
+		gl.uniformMatrix4fv(defaultProgram.uniform.mProj, gl.FALSE, projMatrix);
 		
 		//Camera Position
-		gl.uniform3f(uniformLocation.cameraPos, camera.position[0], camera.position[1], camera.position[2]);
+		gl.uniform3f(defaultProgram.uniform.cameraPos, camera.position[0], camera.position[1], camera.position[2]);
 
 		gl.clearColor(0.25, 0.5, 1.0, 1.0);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -427,12 +431,12 @@ function RunDemo()
 		for (var i = 0; i < goList.length; ++i)
 		{
 			mat4.translate(worldMatrix, identityMatrix, goList[i].position);
-			gl.uniformMatrix4fv(uniformLocation.mWorld, gl.FALSE, worldMatrix);
+			gl.uniformMatrix4fv(defaultProgram.uniform.mWorld, gl.FALSE, worldMatrix);
 			
 			if (i == selectedIndex)
-				gl.uniform3f(uniformLocation.maskColor, 0.5, 0, 0);
+				gl.uniform3f(defaultProgram.uniform.maskColor, 0.5, 0, 0);
 			else
-				gl.uniform3f(uniformLocation.maskColor, 0, 0, 0);
+				gl.uniform3f(defaultProgram.uniform.maskColor, 0, 0, 0);
 			
 			goList[i].Draw();
 		}
