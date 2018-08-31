@@ -2,7 +2,20 @@
 	<head>
 		<title>WebGL Demo</title>
 	</head>
-	<body onload="LoadDemo();">
+	<body onload="LoadDemo()">
+	
+		<button><a href="reversi/index.html">Reversi</a></button>
+		<button onclick="navAlert()">Connect 4</button>
+		
+		<script>
+		function navAlert()
+		{
+			alert("[WIP] PLANNED");
+		}
+		</script>
+		
+		<br><br>
+		
 		<canvas id="game-surface" oncontextmenu="return false;" width="1280" height="720">
 			Your browser does not support HTML5
 		</canvas>

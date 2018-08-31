@@ -1,0 +1,12 @@
+precision mediump float;
+
+varying vec2 fragTexCoord;
+
+uniform sampler2D colorTexture;
+uniform float alpha;
+
+void main() 
+{
+	gl_FragColor = texture2D(colorTexture, fragTexCoord);
+	gl_FragColor.a = alpha;
+}
