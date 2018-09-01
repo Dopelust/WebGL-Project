@@ -1,6 +1,6 @@
 function InitGL(canvas)
 {
-	var gl = canvas.getContext('webgl');
+	var gl = canvas.getContext('webgl', {alpha: false});
 	
 	if (!gl)
 	{
@@ -111,11 +111,12 @@ function InitTexture(texture, image)
 {
 	gl.bindTexture(gl.TEXTURE_2D, texture);
 	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-		
+
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+	gl.generateMipmap(gl.TEXTURE_2D);
 }	
 
 function CreateTexture(url)
@@ -136,18 +137,24 @@ function CreateTexture(url)
 function Mesh()
 {
 	this.loaded = false;
-	this.indicesLength = 0;
-	
-	this.InitVertexBufferObject = function(program, arrayBuffer, attribLocation, count)
+
+	this.InitVBO = function(program, arrayBuffer, attribLocation, count)
 	{
-		var cubeVBO = gl.createBuffer();
-		gl.bindBuffer(gl.ARRAY_BUFFER, cubeVBO);
+		var vbo = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
 		gl.bufferData(gl.ARRAY_BUFFER, arrayBuffer, gl.STATIC_DRAW);
 		
-		var positionAttribLocation = gl.getAttribLocation(program, attribLocation);
-		gl.vertexAttribPointer(positionAttribLocation, count, gl.FLOAT, gl.FALSE, Float32Array.BYTES_PER_ELEMENT * count, 0);
-		gl.enableVertexAttribArray(positionAttribLocation);
+		var attribLoc = gl.getAttribLocation(program, attribLocation);
+		gl.vertexAttribPointer(attribLoc, count, gl.FLOAT, gl.FALSE, Float32Array.BYTES_PER_ELEMENT * count, 0);
+		gl.enableVertexAttribArray(attribLoc);
 	};
+	this.InitIBO = function(arrayBuffer)
+	{
+		var ibo = gl.createBuffer();
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, arrayBuffer, gl.STATIC_DRAW);
+	};
+	
 	this.Init = function(program)
 	{
 		var vertices = [ -0.5, -0.5, 0.0,
@@ -155,25 +162,22 @@ function Mesh()
 						-0.5, 0.5, 0.0,
 						0.5, 0.5, 0.0 ];
 						
-		var texturecoords = [ 0, 0,
-							1, 0,
-							0, 1,
-							1, 1];	
-				
-		this.InitVertexBufferObject(program, new Float32Array(vertices), 'vertexPosition', 3);
-		this.InitVertexBufferObject(program, new Float32Array(texturecoords), 'vertexTexCoord', 2);
-		
+		var texturecoords = [ 0, 1,
+							  1, 1,
+							  0, 0,
+							  1, 0];
+							
 		var indices = [0, 1, 2, 2, 1, 3];
-		var cubeIBO = gl.createBuffer();
-		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeIBO);
-		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
 		
-		this.indicesLength = indices.length;
+		this.InitVBO(program, new Float32Array(vertices), 'vertexPosition', 3);
+		this.InitVBO(program, new Float32Array(texturecoords), 'vertexTexCoord', 2);
+		this.InitIBO(new Uint16Array(indices));
+		
 		this.loaded = true;
 	};
 	this.Draw = function()
 	{
-		gl.drawElements(gl.TRIANGLES, this.indicesLength, gl.UNSIGNED_SHORT, 0);
+		gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
 	};
 };
 
@@ -183,6 +187,17 @@ const gridState =
 	BLACK: 0,
 	WHITE: 1,
 };
+var gridDir = 
+[
+	[0, -1],
+	[0, 1],
+	[1, -1],
+	[-1, 1],
+	[-1, 0],
+	[1, 0],
+	[-1, -1],
+	[1, 1],
+];
 
 function Grid()
 {
@@ -192,6 +207,7 @@ function Grid()
 function Board()
 {
 	this.grid = new Array(8);
+	this.turn = false;
 	
 	this.Init = function()
 	{
@@ -206,117 +222,100 @@ function Board()
 		this.grid[3][3].currState = gridState.WHITE;
 		this.grid[3][4].currState = gridState.BLACK;
 		this.grid[4][3].currState = gridState.BLACK;
-		this.grid[4][4].currState = gridState.WHITE
+		this.grid[4][4].currState = gridState.WHITE;
+		
+		this.turn = false;
 	};
 	
-	this.CheckLeftCheckers = function(x, y, white)
+	this.GetScore = function()
 	{
-		if (x > 0 && this.grid[x - 1][y].currState != white) //Adjacent checker must be different color
-			for (var i = x - 1; x >= 0; --i) { //Iterates through the given direction
-				if (this.grid[i][y].currState == gridState.NULL) //If empty checker found, can't be placed
+		var score = {black: 0, white: 0};
+		
+		for (var i = 0; i < 8; ++i)
+			for (var j = 0; j < 8; ++j)
+			{
+				switch (this.grid[i][j].currState)
+				{
+					case gridState.BLACK: score.black++; break;
+					case gridState.WHITE: score.white++; break;
+				}
+			}
+
+		return score;
+	}
+	this.CheckCheckers = function(x, y, white, dirx, diry)
+	{
+		if ((x + dirx) >= 0 && (x + dirx) < 8 && (y + diry) >= 0 && (y + diry) < 8 && this.grid[x + dirx][y + diry].currState != white) //Adjacent checker must be different color
+		{
+			for (var i = x + dirx, j = y + diry; i >= 0 && i < 8 && j >= 0 && j < 8; i += dirx, j += diry) //Iterates through the given direction
+			{ 
+				if (this.grid[i][j].currState == gridState.NULL) //If empty checker found, can't be placed
 					return false;
-				else if (this.grid[i][y].currState == white) //If found the checker, can be placed.
-					return true; }
+				else if (this.grid[i][j].currState == white) //If found the checker, can be placed.
+					return true; 
+			}
+		}
 		return false;
 	}
-	this.ChangeLeftCheckers = function(x, y, white) //Assumes that CheckTopCheckers for the corresponding parameters has already returned true
+	this.ChangeCheckers = function(x, y, white, dirx, diry) //Assumes that CheckCheckers for the corresponding parameters has already returned true
 	{
-		for (var i = x - 1; x >= 0; --i) {
-			if (this.grid[i][y].currState != white)
-				this.grid[i][y].currState = white;
-			else if (this.grid[i][y].currState == white)
-				return true; }
-		return false;
-	}
-	this.CheckRightCheckers = function(x, y, white)
-	{
-		if (x < 7 && this.grid[x + 1][y].currState != white) //Adjacent checker must be different color
-			for (var i = x + 1; x < 8; ++i) { //Iterates through the given direction
-				if (this.grid[i][y].currState == gridState.NULL) //If empty checker found, can't be placed
-					return false;
-				else if (this.grid[i][y].currState == white) //If found the checker, can be placed.
-					return true; }
-		return false;
-	}
-	this.ChangeRightCheckers = function(x, y, white) //Assumes that CheckTopCheckers for the corresponding parameters has already returned true
-	{
-		for (var i = x + 1; x < 8; ++i) {
-			if (this.grid[i][y].currState != white)
-				this.grid[i][y].currState = white;
-			else if (this.grid[i][y].currState == white)
-				return true; }
-		return false;
-	}
-	this.CheckBottomCheckers = function(x, y, white)
-	{
-		if (y < 7 && this.grid[x][y + 1].currState != white) //Adjacent checker must be different color
-			for (var j = y + 1; j < 8; ++j) { //Iterates through the given direction
-				if (this.grid[x][j].currState == gridState.NULL) //If empty checker found, can't be placed
-					return false;
-				else if (this.grid[x][j].currState == white) //If found the checker, can be placed.
-					return true; }
-		return false;
-	}
-	this.ChangeBottomCheckers = function(x, y, white) //Assumes that CheckTopCheckers for the corresponding parameters has already returned true
-	{
-		for (var j = y + 1; j < 8; ++j) {
-			if (this.grid[x][j].currState != white)
-				this.grid[x][j].currState = white;
-			else if (this.grid[x][j].currState == white)
-				return true; }
-		return false;
-	}	
-	this.CheckTopCheckers = function(x, y, white)
-	{
-		if (y > 0 && this.grid[x][y - 1].currState != white) //Adjacent checker must be different color
-			for (var j = y - 1; j >= 0; --j) { //Iterates through the given direction
-				if (this.grid[x][j].currState == gridState.NULL) //If empty checker found, can't be placed
-					return false;
-				else if (this.grid[x][j].currState == white) //If found the checker, can be placed.
-					return true; }
-		return false;
-	}
-	this.ChangeTopCheckers = function(x, y, white) //Assumes that CheckTopCheckers for the corresponding parameters has already returned true
-	{
-		for (var j = y - 1; j >= 0; --j) {
-			if (this.grid[x][j].currState != white)
-				this.grid[x][j].currState = white;
-			else if (this.grid[x][j].currState == white)
-				return true; }
-		return false;
-	}
-	
-	this.CanPlaceChecker = function(x, y, white)
-	{
-		if (this.grid[x][y].currState == gridState.NULL)
-			return this.CheckTopCheckers(x, y, white) ||
-					 this.CheckBottomCheckers(x, y, white) ||
-					  this.CheckLeftCheckers(x, y, white) ||
-					   this.CheckRightCheckers(x, y, white);
+		for (var i = x + dirx, j = y + diry; i >= 0 && i < 8 && j >= 0 && j < 8; i += dirx, j += diry) //Iterates through the given direction
+		{ 
+			if (this.grid[i][j].currState != white)
+				this.grid[i][j].currState = white;
+			else if (this.grid[i][j].currState == white)
+				return true;
+		}
 		
 		return false;
 	}
+	this.CanPlaceChecker = function(x, y)
+	{
+		var white = this.turn ? 1 : 0;
+		
+		if (this.grid[x][y].currState == gridState.NULL)
+			for (var i = 0; i < 8; ++i)
+			{
+				if (this.CheckCheckers(x, y, white, gridDir[i][0], gridDir[i][1]))
+					return true;
+			}
 	
-	this.PlaceChecker = function(x, y, white)
+		return false;
+	}
+	this.PlaceChecker = function(x, y)
 	{	
 		if (x >= 0 && x < 8 && y >= 0 && y < 8 && this.CanPlaceChecker(x, y, white))
 		{
+			var white = this.turn ? 1 : 0;
 			this.grid[x][y].currState = white;
 		
-			if (this.CheckTopCheckers(x, y, white))
-				this.ChangeTopCheckers(x, y, white);
-			if (this.CheckBottomCheckers(x, y, white))
-				this.ChangeBottomCheckers(x, y, white);
-			if (this.CheckLeftCheckers(x, y, white))
-				this.ChangeLeftCheckers(x, y, white);
-			if (this.CheckRightCheckers(x, y, white))
-				this.ChangeRightCheckers(x, y, white);
-				
+			for (var i = 0; i < 8; ++i)
+			{
+				if (this.CheckCheckers(x, y, white, gridDir[i][0], gridDir[i][1]))
+					this.ChangeCheckers(x, y, white, gridDir[i][0], gridDir[i][1])
+			}
+			
+			this.turn = !this.turn;
 			return true;
 		}
 		
 		return false;
 	}
+}
+var reversi = new Board();
+
+function UpdateScoreboard()
+{
+	var score = reversi.GetScore();
+	
+	document.getElementById("black_count").innerHTML = score.black;
+	document.getElementById("white_count").innerHTML = score.white;
+}
+	
+function ResetBoard()
+{
+	reversi.Init();
+	UpdateScoreboard();
 }
 
 function RunDemo() 
@@ -326,24 +325,18 @@ function RunDemo()
 	var mesh = new Mesh();
 	mesh.Init(defaultProgram.program);
  
-	var reversi = new Board();
-	reversi.Init();
-	
+	ResetBoard();
+		
 	var texture = 
 	{
 		board: gl.createTexture(),
-		black_checker:  gl.createTexture(),
-		white_checker:  gl.createTexture(),
+		black_checker:  CreateTexture("black_checker.png"),
+		white_checker:  CreateTexture("white_checker.png"),
 	};
  
 	gl.bindTexture(gl.TEXTURE_2D, texture.board);
 	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 128, 0, 255]));
-	
-	gl.bindTexture(gl.TEXTURE_2D, texture.black_checker);
-	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
-	
-	gl.bindTexture(gl.TEXTURE_2D, texture.white_checker);
-	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+	texture.board.loaded = true;
 	
 	defaultProgram.uniform = 
 	{
@@ -360,24 +353,23 @@ function RunDemo()
 
 	var identityMatrix = new Float32Array(16);
 	mat4.identity(identityMatrix);
-
-	var currentMousePos = vec3.create();
 	
 	var tileWidth = canvas.width / 8.0;
 	var tileHeight = canvas.height / 8.0;
 	
-	var tileIndexX = 0;
-	var tileIndexY = 0;
+	var tileIndexX = -1;
+	var tileIndexY = -1;
 	
-	var turn = false;
-	
+	var currentMousePos = vec3.fromValues(-tileWidth, -tileHeight);
+		
 	canvas.onmousedown = function(e)
 	{
 	};
 	
 	document.onmouseup = function(e)
 	{
-		PlaceChecker(tileIndexX, tileIndexY);
+		if (e.which == 1)
+			PlaceChecker(tileIndexX, tileIndexY);
 	};
 	
 	document.onmousemove = function(e)
@@ -391,8 +383,10 @@ function RunDemo()
 	
 	function PlaceChecker(x, y)
 	{
-		if (reversi.PlaceChecker(x, y, turn ? 1 : 0))
-			turn = !turn;	
+		if (reversi.PlaceChecker(x, y))
+		{	
+			UpdateScoreboard();
+		}
 	}
 	
 	var update = function()
@@ -401,6 +395,21 @@ function RunDemo()
 		tileIndexY = parseInt(currentMousePos[1] / tileHeight);
 	}
 
+	var identityQuat = quat.create();
+	quat.identity(identityQuat);
+		
+	function draw2d(texture, position, scale)
+	{
+		if (texture.loaded)
+		{
+			mat4.fromRotationTranslationScale(worldMatrix, identityQuat, position, scale);
+			gl.uniformMatrix4fv(defaultProgram.uniform.mWorld, gl.FALSE, worldMatrix);
+			
+			gl.bindTexture(gl.TEXTURE_2D, texture);
+			mesh.Draw();
+		}
+	}
+	
 	var draw = function()
 	{
 		mat4.ortho(projMatrix, -canvas.width / 2.0, canvas.width / 2.0, -canvas.height / 2.0, canvas.height / 2.0, -10.0, 10.0);
@@ -409,9 +418,6 @@ function RunDemo()
 		gl.clearColor(0.0, 0.0, 0.0, 1.0);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 			
-		var identityQuat = quat.create();
-		quat.identity(identityQuat);
-		
 		var tileScaleX = tileWidth - 4.0;
 		var tileScaleY = tileHeight - 4.0;
 			
@@ -421,36 +427,29 @@ function RunDemo()
 		{
 			for (var j = 0; j < 8; ++j)
 			{
-				mat4.fromRotationTranslationScale(worldMatrix, identityQuat, vec3.fromValues((i - 3.5) * tileWidth, (j - 3.5) * -tileHeight, 0), vec3.fromValues(tileScaleX, tileScaleY, 1.0));
-				gl.uniformMatrix4fv(defaultProgram.uniform.mWorld, gl.FALSE, worldMatrix);
+				draw2d(texture.board, vec3.fromValues((i - 3.5) * tileWidth, (j - 3.5) * -tileHeight, 0), vec3.fromValues(tileScaleX, tileScaleY, 1.0));
 				
 				switch (reversi.grid[i][j].currState)
 				{
-				case gridState.NULL:
-					gl.bindTexture(gl.TEXTURE_2D, texture.board);
-					break;
 				case gridState.BLACK:
-					gl.bindTexture(gl.TEXTURE_2D, texture.black_checker);
+					draw2d(texture.black_checker, vec3.fromValues((i - 3.5) * tileWidth, (j - 3.5) * -tileHeight, 1.0), vec3.fromValues(tileScaleX, tileScaleY, 1.0));
 					break;
 				case gridState.WHITE:
-					gl.bindTexture(gl.TEXTURE_2D, texture.white_checker);
+					draw2d(texture.white_checker, vec3.fromValues((i - 3.5) * tileWidth, (j - 3.5) * -tileHeight, 1.0), vec3.fromValues(tileScaleX, tileScaleY, 1.0));
 					break;
 				}
-				mesh.Draw();
 			}
 		}
 		
 		if (tileIndexX >= 0 && tileIndexX < 8 && tileIndexY >= 0 && tileIndexY < 8 && reversi.grid[tileIndexX][tileIndexY].currState == gridState.NULL)
 		{
-			if (turn)
-				gl.bindTexture(gl.TEXTURE_2D, texture.white_checker);
-			else
-				gl.bindTexture(gl.TEXTURE_2D, texture.black_checker);
-			
-			mat4.fromRotationTranslationScale(worldMatrix, identityQuat, vec3.fromValues((tileIndexX - 3.5) * tileWidth, (tileIndexY - 3.5) * -tileHeight, 1.0), vec3.fromValues(tileScaleX * 0.75, tileScaleY * 0.75, 1.0));
-			gl.uniformMatrix4fv(defaultProgram.uniform.mWorld, gl.FALSE, worldMatrix);
-			
-			mesh.Draw();
+			if (reversi.CanPlaceChecker(tileIndexX, tileIndexY))
+			{
+				if (reversi.turn)
+					draw2d(texture.white_checker, vec3.fromValues((tileIndexX - 3.5) * tileWidth, (tileIndexY - 3.5) * -tileHeight, 1.0), vec3.fromValues(tileScaleX, tileScaleY, 1.0));
+				else
+					draw2d(texture.black_checker, vec3.fromValues((tileIndexX - 3.5) * tileWidth, (tileIndexY - 3.5) * -tileHeight, 1.0), vec3.fromValues(tileScaleX, tileScaleY, 1.0));
+			}
 		}
 	}
 
@@ -458,10 +457,7 @@ function RunDemo()
 	{
 		update();
 		draw();
-		
-		//Flush input
-		deltaMousePos = vec3.fromValues(0,0,0);
-		
+
 		requestAnimationFrame(loop);
 	};
 	requestAnimationFrame(loop);

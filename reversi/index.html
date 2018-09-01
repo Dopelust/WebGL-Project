@@ -5,11 +5,28 @@
 	<body onload="LoadDemo()">
 	
 		<button><a href="../index.html">Go Back</a></button>
+		
 		<br><br>
 		
-		<canvas id="game-surface" oncontextmenu="return false;" width="512" height="512">
-			Your browser does not support HTML5
-		</canvas>
+		<table style="width:100%" border="0px">
+		<tr>
+			<td width="524">
+				<canvas id="game-surface" oncontextmenu="return false;" width="512" height="512">
+				Your browser does not support HTML5
+				</canvas>
+			</td>
+			<td valign="top">
+				<h1>Black:</h1>
+				<h2 id = "black_count">0</h2>
+				<h1>White:</h1>
+				<h2 id = "white_count">0</h2>
+			</td>
+		</tr>
+		</table>
+		
+		<br>
+		
+		<button onclick="ResetBoard()">Reset</button>
 		
 		<script src="../gl-matrix.js"></script>
 		<script src="../loader.js"></script>
