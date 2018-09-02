@@ -4,7 +4,7 @@
 	</head>
 	<body onload="LoadDemo()">
 	
-		<button><a href="../index.html">Go Back</a></button>
+		<button><a href="../">Go Back</a></button>
 		
 		<br><br>
 		
@@ -28,8 +28,33 @@
 		
 		<button onclick="ResetBoard()">Reset</button>
 		
-		<script src="../gl-matrix.js"></script>
-		<script src="../loader.js"></script>
-		<script src="webgl.js"></script>
+		<br>
+		<br>
+		
+		<table>
+		<tr>
+			<td width="785px">
+				<div id="chatroom" style="height:256px; width:100%; border:1px solid; overflow:auto;">
+				<b>Enter Username:</b>
+				</div>
+				<input id="chat" size="100"></input> <button id="send" onclick="SendChat()">Send</button>
+			</td>
+			<td valign="top" width="128px">
+				<div id="online_list" style="height:277px; width:100%; border:1px solid; overflow:auto;">
+				<i>Online:</i><br>
+				</div>
+			</td>
+		</tr>
+		</table>
+		
+		
+		
+		<script src="../js/gl-matrix.js"></script>
+		<script src="../js/loader.js"></script>
+		<script src="../js/reversi/reversi.js"></script>
+		
+		<script src="/socket.io/socket.io.js"></script>
+		<script src="../js/reversi/chatroom.js"></script>
+		
 	</body>
 </html>
