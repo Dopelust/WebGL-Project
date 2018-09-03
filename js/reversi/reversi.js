@@ -181,6 +181,12 @@ function Mesh()
 	};
 };
 
+const gameState = 
+{
+	COMPUTER : 0,
+	LOCAL: 1,
+	ONLINE: 2,
+};
 const gridState = 
 {
 	NULL : -1,
@@ -208,6 +214,8 @@ function Board()
 {
 	this.grid = new Array(8);
 	this.turn = false;
+	this.player = false;
+	this.state = gameState.COMPUTER;
 	
 	this.Init = function()
 	{
@@ -296,10 +304,19 @@ function Board()
 			}
 			
 			this.turn = !this.turn;
+			if (roomNo > 1)
+				socket.emit('reversi move', {x: x, y: y, room:roomNo});
 			return true;
 		}
 		
 		return false;
+	}
+	this.IsPlayerTurn = function()
+	{
+		if (this.state == gameState.LOCAL)
+			return true;
+		else
+			return this.player == this.turn;
 	}
 }
 var reversi = new Board();
@@ -311,11 +328,25 @@ function UpdateScoreboard()
 	document.getElementById("black_count").innerHTML = score.black;
 	document.getElementById("white_count").innerHTML = score.white;
 }
+
+function PlaceChecker(x, y)
+{
+	if (reversi.PlaceChecker(x, y))
+	{	
+		UpdateScoreboard();
+	}
+}
 	
-function ResetBoard()
+function ResetBoard(player = false)
 {
 	reversi.Init();
+	reversi.player = player;
+	
 	UpdateScoreboard();
+}
+function ChangeBoardState(boardState)
+{
+	reversi.state = boardState;
 }
 
 function RunDemo() 
@@ -368,7 +399,7 @@ function RunDemo()
 	
 	document.onmouseup = function(e)
 	{
-		if (e.which == 1)
+		if (reversi.IsPlayerTurn() && e.which == 1)
 			PlaceChecker(tileIndexX, tileIndexY);
 	};
 	
@@ -380,15 +411,7 @@ function RunDemo()
 		currentMousePos[0] = eX;
 		currentMousePos[1] = eY;
 	};
-	
-	function PlaceChecker(x, y)
-	{
-		if (reversi.PlaceChecker(x, y))
-		{	
-			UpdateScoreboard();
-		}
-	}
-	
+
 	var update = function()
 	{
 		tileIndexX = parseInt(currentMousePos[0] / tileWidth);
@@ -441,7 +464,7 @@ function RunDemo()
 			}
 		}
 		
-		if (tileIndexX >= 0 && tileIndexX < 8 && tileIndexY >= 0 && tileIndexY < 8 && reversi.grid[tileIndexX][tileIndexY].currState == gridState.NULL)
+		if (reversi.IsPlayerTurn() && tileIndexX >= 0 && tileIndexX < 8 && tileIndexY >= 0 && tileIndexY < 8 && reversi.grid[tileIndexX][tileIndexY].currState == gridState.NULL)
 		{
 			if (reversi.CanPlaceChecker(tileIndexX, tileIndexY))
 			{

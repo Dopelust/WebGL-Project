@@ -34,6 +34,27 @@ io.on('connection', function(socket)
 		userlist.push(username);
 	});
   
+	socket.on('create room', function(msg){
+		console.log('user created room');
+		socket.join(msg.room.toString());
+		io.emit('create room', msg);
+	});
+	socket.on('join room', function(msg){
+		console.log('user joined room');
+		socket.join(msg.room.toString());
+		io.emit('join room', msg);
+	});
+	socket.on('leave room', function(msg){
+		console.log('user left room');
+		socket.leave(msg.room.toString());
+		io.emit('leave room', msg);
+	});
+	
+	socket.on('reversi move', function(msg){
+		console.log('user reversi move');
+		socket.broadcast.to(msg.room.toString()).emit('reversi move', msg);
+	});
+	
 	socket.on('chat message', function(msg){
 		console.log('message: ' + msg);
 		socket.broadcast.emit('chat message', msg);

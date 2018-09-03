@@ -6,7 +6,23 @@
 	
 		<button><a href="../">Go Back</a></button>
 		
-		<br><br>
+		<br>
+		
+		<h1 id="room_title">Room 1: YOU(Black) VS Computer(White)</h1>
+		
+		<table width="518">
+		<tr>
+			<td width="218">
+				<button onclick="CreateNewRoom()">Create New Room</button> <button onclick="InviteToRoom()" id="invite_room" disabled>Send Invite</button> 
+			</td>
+			<td width="300" align="right">
+				<button onclick="StartCoop()">Start New Local Co-Op</button>
+				<button onclick="StartComputer()">Start New Computer</button>
+			</td>
+		</tr>
+		</table>
+		
+		<br>
 		
 		<table style="width:100%" border="0px">
 		<tr>
@@ -16,45 +32,39 @@
 				</canvas>
 			</td>
 			<td valign="top">
-				<h1>Black:</h1>
+				<h1 id="black_turn"><u>Black</u></h1>
 				<h2 id = "black_count">0</h2>
-				<h1>White:</h1>
+				<h1 id ="white_turn"><u>White</u></h1>
 				<h2 id = "white_count">0</h2>
 			</td>
 		</tr>
 		</table>
 		
 		<br>
-		
-		<button onclick="ResetBoard()">Reset</button>
-		
-		<br>
-		<br>
+
 		
 		<table>
 		<tr>
-			<td width="785px">
-				<div id="chatroom" style="height:256px; width:100%; border:1px solid; overflow:auto;">
+			<td width="512px">
+				<div id="chatroom" style="height:180px; width:100%; border:1px solid; overflow:auto;">
 				<b>Enter Username:</b>
 				</div>
-				<input id="chat" size="100"></input> <button id="send" onclick="SendChat()">Send</button>
+				<input id="chat" size="61"></input> <button id="send" onclick="SendChat()">Send</button>
 			</td>
-			<td valign="top" width="128px">
-				<div id="online_list" style="height:277px; width:100%; border:1px solid; overflow:auto;">
+			<td valign="top" width="108px">
+				<div id="online_list" style="height:201px; width:100%; border:1px solid; overflow:auto;">
 				<i>Online:</i><br>
 				</div>
 			</td>
 		</tr>
 		</table>
 		
-		
+		<script src="/socket.io/socket.io.js"></script>
+		<script src="../js/reversi/chatroom.js"></script>
 		
 		<script src="../js/gl-matrix.js"></script>
 		<script src="../js/loader.js"></script>
 		<script src="../js/reversi/reversi.js"></script>
-		
-		<script src="/socket.io/socket.io.js"></script>
-		<script src="../js/reversi/chatroom.js"></script>
 		
 	</body>
 </html>
